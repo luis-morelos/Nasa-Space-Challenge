@@ -379,7 +379,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SelectorMisionMenu
   textoBotonSuperior: {fileID: 1165038391}
   textoBotonInferior: {fileID: 1007757729}
-  escenaSalaEnsamblaje: SalaEnsamblaje
+  escenaSalaEnsamblaje: Esamblaje
 --- !u!114 &255645244
 MonoBehaviour:
   m_ObjectHideFlags: 0

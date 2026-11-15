@@ -9,8 +9,8 @@ public class SelectorMisionMenu : MonoBehaviour
     public TMP_Text textoBotonInferior;
 
     [Header("Escena Siguiente")]
-    [Tooltip("Escribe el nombre exacto de la escena de ensamblaje")]
-    public string escenaSalaEnsamblaje = "SalaEnsamblaje";
+    [Tooltip("Debe coincidir exactamente con el nombre en File -> Build Profiles")]
+    public string escenaSalaEnsamblaje = "Esamblaje";
 
     private int pasoActual = 0; // 0 = Tipo de misión, 1 = Órbita
     private string tipoMisionElegida = "";
@@ -25,6 +25,7 @@ public class SelectorMisionMenu : MonoBehaviour
     {
         if (pasoActual == 0)
         {
+            // Este botón es el de Misión No Tripulada (Permitido)
             tipoMisionElegida = "No Tripulada";
             PasarASeleccionOrbita();
         }
@@ -39,8 +40,9 @@ public class SelectorMisionMenu : MonoBehaviour
     {
         if (pasoActual == 0)
         {
-            tipoMisionElegida = "Tripulada";
-            PasarASeleccionOrbita();
+            // RESTRICCIÓN: Las misiones tripuladas están desactivadas por ahora
+            Debug.LogWarning("Las misiones tripuladas están deshabilitadas temporalmente.");
+            return; // No hace nada y detiene la ejecución
         }
         else if (pasoActual == 1)
         {
@@ -58,12 +60,11 @@ public class SelectorMisionMenu : MonoBehaviour
 
     private void IrASalaEnsamblaje()
     {
-        // Guardamos los datos para leerlos al entrar a la Sala de Ensamblaje
         PlayerPrefs.SetString("TipoMision", tipoMisionElegida);
         PlayerPrefs.SetString("TipoOrbita", orbitaElegida);
         PlayerPrefs.Save();
 
-        Debug.Log($"Guardado: {tipoMisionElegida} | {orbitaElegida}. Cargando: {escenaSalaEnsamblaje}");
+        Debug.Log($"[Menú] Guardado -> Misión: {tipoMisionElegida} | Órbita: {orbitaElegida}. Cargando: {escenaSalaEnsamblaje}");
 
         if (!string.IsNullOrEmpty(escenaSalaEnsamblaje))
         {
@@ -79,6 +80,7 @@ public class SelectorMisionMenu : MonoBehaviour
     {
         pasoActual = 0;
         textoBotonSuperior.text = "Mision No Tripulada";
-        textoBotonInferior.text = "Mision Tripulada";
+        textoBotonInferior.text = "Mision Tripulada (Bloqueada)"; // Opcional: indicar visualmente que está bloqueado
     }
+
 }
