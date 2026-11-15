@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Playables;
+using UnityEngine.SceneManagement; // Necesario para cambiar de sala/escena
 using System.Collections.Generic;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
@@ -33,6 +34,15 @@ public class DespegueCohete : MonoBehaviour
     [Tooltip("Segundos para curvarse del despegue a la orbita")]
     public float duracionTransicion = 4f;
     public bool fuegoDuranteOrbita = true;
+
+    [Header("CAMBIO DE SALA (POST-MISIÓN EN VR)")]
+    [Tooltip("Segundos totales desde que inicia el lanzamiento para cambiar de sala")]
+    public float tiempoParaMostrarResultados = 10f;
+
+    [Tooltip("Escribe aquí exactamente el nombre de la siguiente escena que quieres cargar")]
+    public string nombreSiguienteSala = "NombreDeTuEscena";
+
+    private bool cambioSalaEjecutado = false;
 
     [Header("EFECTOS DE FUEGO")]
     public Transform salidaMotores;
@@ -84,7 +94,6 @@ public class DespegueCohete : MonoBehaviour
     [Tooltip("Un campo de vision muy alto estira el cohete en los bordes de la pantalla")]
     [Range(30f, 90f)] public float campoDeVision = 60f;
 
-    // Pose original de cada pieza del modelo (para que nada se separe)
     private struct PoseOriginal
     {
         public Transform pieza;
@@ -131,10 +140,8 @@ public class DespegueCohete : MonoBehaviour
         if (separarDePadreDeformado) CorregirPadreDeformado();
         RevisarEscalaPropia();
 
-        // Debe ir antes de CrearFuego para no bloquear el objeto del fuego
         if (omitirSeparacion) DesactivarSeparacion();
 
-        // Si tiene Rigidbody, la fisica peleaba con el movimiento y causaba temblor
         Rigidbody rb = GetComponent<Rigidbody>();
         if (rb != null)
         {
@@ -161,16 +168,12 @@ public class DespegueCohete : MonoBehaviour
                   " | Radio orbita: " + radioActual.ToString("F1"));
     }
 
-    // ===================== SEPARACION DE PROPULSORES =====================
-
     void DesactivarSeparacion()
     {
         int desactivados = 0;
-
-        // 1. Animaciones del modelo (Animator / Animation)
         foreach (Animator a in GetComponentsInChildren<Animator>(true))
         {
-            a.Rebind();      // regresa a la pose inicial
+            a.Rebind();
             a.Update(0f);
             a.enabled = false;
             desactivados++;
@@ -183,7 +186,6 @@ public class DespegueCohete : MonoBehaviour
             desactivados++;
         }
 
-        // 2. Timeline que anime el cohete
         foreach (PlayableDirector d in GetComponentsInChildren<PlayableDirector>(true))
         {
             d.Stop();
@@ -191,7 +193,6 @@ public class DespegueCohete : MonoBehaviour
             desactivados++;
         }
 
-        // 3. Piezas con fisica que caerian al separarse
         foreach (Rigidbody rb in GetComponentsInChildren<Rigidbody>(true))
         {
             if (rb.transform == transform) continue;
@@ -202,7 +203,6 @@ public class DespegueCohete : MonoBehaviour
         foreach (Joint j in GetComponentsInChildren<Joint>(true))
             j.breakForce = Mathf.Infinity;
 
-        // 4. Guardar la pose de cada pieza para bloquearla cada frame
         poses.Clear();
         foreach (Transform t in GetComponentsInChildren<Transform>(true))
         {
@@ -216,12 +216,8 @@ public class DespegueCohete : MonoBehaviour
                 escala = t.localScale
             });
         }
-
-        Debug.Log("Separacion de propulsores omitida (" + desactivados +
-                  " animaciones desactivadas, " + poses.Count + " piezas bloqueadas).");
     }
 
-    // Si un Timeline externo u otro script intenta mover los propulsores, se regresan a su lugar
     void BloquearPiezas()
     {
         for (int i = 0; i < poses.Count; i++)
@@ -229,7 +225,6 @@ public class DespegueCohete : MonoBehaviour
             PoseOriginal p = poses[i];
             if (p.pieza == null) continue;
 
-            // Si la pieza fue sacada del cohete, se vuelve a meter en su lugar
             if (p.pieza.parent != p.padre && p.padre != null)
                 p.pieza.SetParent(p.padre, false);
 
@@ -242,8 +237,6 @@ public class DespegueCohete : MonoBehaviour
         }
     }
 
-    // ===================== ANTI DEFORMACION =====================
-
     static bool EscalaDesigual(Vector3 s)
     {
         float a = Mathf.Abs(s.x), b = Mathf.Abs(s.y), c = Mathf.Abs(s.z);
@@ -252,8 +245,6 @@ public class DespegueCohete : MonoBehaviour
         return (max - Mathf.Min(a, b, c)) / max > 0.01f;
     }
 
-    // Un padre con escala desigual (ej. 1, 3, 1) + girar el cohete = modelo estirado/torcido.
-    // Se saca el cohete del padre conservando su posicion y tamano en el mundo.
     void CorregirPadreDeformado()
     {
         Transform p = transform.parent;
@@ -270,12 +261,9 @@ public class DespegueCohete : MonoBehaviour
             Vector3 escalaMundo = transform.lossyScale;
             transform.SetParent(null, true);
             transform.localScale = escalaMundo;
-            Debug.Log("Cohete separado de un padre con escala desigual para evitar deformacion.");
         }
     }
 
-    // Si el propio cohete tiene escala desigual y sus piezas hijas estan rotadas,
-    // esas piezas se tuercen al girar. Esto solo se arregla en el modelo (ver consola).
     void RevisarEscalaPropia()
     {
         if (!EscalaDesigual(transform.localScale)) return;
@@ -283,18 +271,13 @@ public class DespegueCohete : MonoBehaviour
         foreach (Transform hijo in GetComponentsInChildren<Transform>())
         {
             if (hijo == transform) continue;
-            if (Quaternion.Angle(hijo.localRotation, Quaternion.identity) > 0.5f)
-            {
-                Debug.LogWarning("El cohete tiene escala desigual " + transform.localScale +
-                    " y piezas rotadas: se deformaran al girar. Solucion: pon la escala del cohete en " +
-                    "valores iguales (ej. 1,1,1) y ajusta el tamano en un objeto hijo o en el Import Settings del modelo.");
-                return;
-            }
+            if (Quaternion.Angle(hijo.localRotation, Quaternion.identity) > 0.5f) return;
         }
     }
 
     void CorregirCamaraDeformante()
     {
+        if (camara == null) return;
         camara.fieldOfView = campoDeVision;
 
         if (quitarTAA)
@@ -305,8 +288,6 @@ public class DespegueCohete : MonoBehaviour
         }
     }
 
-    // ===================== MEDIDAS =====================
-
     bool CalcularLimites(Transform raiz, out Bounds limites)
     {
         limites = new Bounds();
@@ -314,13 +295,11 @@ public class DespegueCohete : MonoBehaviour
 
         foreach (Renderer r in raiz.GetComponentsInChildren<Renderer>())
         {
-            if (!(r is MeshRenderer || r is SkinnedMeshRenderer))
-                continue;
+            if (!(r is MeshRenderer || r is SkinnedMeshRenderer)) continue;
 
             if (!encontrado) { limites = r.bounds; encontrado = true; }
             else limites.Encapsulate(r.bounds);
         }
-
         return encontrado;
     }
 
@@ -353,21 +332,12 @@ public class DespegueCohete : MonoBehaviour
             GameObject g = GameObject.Find(n);
             if (g != null) { tierra = g.transform; break; }
         }
-
-        if (tierra == null)
-            Debug.LogWarning("No se asigno la Tierra: se usara posicionTierraManual. " +
-                             "Arrastra la Tierra al campo 'tierra' para que la orbita no la atraviese.");
     }
 
     void CalcularRadioOrbita()
     {
         radioTierra = RadioTierra();
-
-        radioActual = radioOrbita > 0f
-            ? radioOrbita
-            : radioTierra * factorRadio + margenSobreTierra + alturaCohete * 0.5f;
-
-        // Nunca menor a la superficie del planeta
+        radioActual = radioOrbita > 0f ? radioOrbita : radioTierra * factorRadio + margenSobreTierra + alturaCohete * 0.5f;
         radioActual = Mathf.Max(radioActual, radioTierra + alturaCohete);
     }
 
@@ -379,12 +349,10 @@ public class DespegueCohete : MonoBehaviour
         float maxEscala = Mathf.Max(Mathf.Abs(escala.x), Mathf.Abs(escala.y), Mathf.Abs(escala.z));
 
         SphereCollider esfera = tierra.GetComponentInChildren<SphereCollider>();
-        if (esfera != null)
-            return esfera.radius * maxEscala;
+        if (esfera != null) return esfera.radius * maxEscala;
 
         Bounds b;
-        if (CalcularLimites(tierra, out b))
-            return Mathf.Max(b.extents.x, b.extents.y, b.extents.z);
+        if (CalcularLimites(tierra, out b)) return Mathf.Max(b.extents.x, b.extents.y, b.extents.z);
 
         return maxEscala * 0.5f;
     }
@@ -393,8 +361,6 @@ public class DespegueCohete : MonoBehaviour
     {
         return tierra != null ? tierra.position : posicionTierraManual;
     }
-
-    // ===================== FUEGO =====================
 
     void CrearFuego()
     {
@@ -408,10 +374,8 @@ public class DespegueCohete : MonoBehaviour
         else
             objeto.transform.localPosition = new Vector3(centroLocal.x, baseLocalY, centroLocal.z);
 
-        // Apunta hacia la base del cohete (gira junto con el)
         objeto.transform.rotation = Quaternion.LookRotation(-transform.up, transform.forward);
 
-        // Evita que una escala desigual del modelo deforme el fuego
         Vector3 ls = transform.lossyScale;
         objeto.transform.localScale = new Vector3(
             1f / Mathf.Max(Mathf.Abs(ls.x), 0.0001f),
@@ -430,9 +394,7 @@ public class DespegueCohete : MonoBehaviour
         main.startColor = Color.white;
         main.maxParticles = 400;
         main.scalingMode = ParticleSystemScalingMode.Local;
-        main.simulationSpace = fuegoPegadoAlCohete
-            ? ParticleSystemSimulationSpace.Local
-            : ParticleSystemSimulationSpace.World;
+        main.simulationSpace = fuegoPegadoAlCohete ? ParticleSystemSimulationSpace.Local : ParticleSystemSimulationSpace.World;
 
         var emision = fuego.emission;
         emision.enabled = true;
@@ -451,10 +413,10 @@ public class DespegueCohete : MonoBehaviour
         degradado.SetKeys(
             new GradientColorKey[]
             {
-                new GradientColorKey(new Color(1f, 1f, 0.1f), 0f),     // Amarillo
-                new GradientColorKey(new Color(1f, 0.45f, 0f), 0.25f), // Naranja
-                new GradientColorKey(new Color(1f, 0.05f, 0f), 0.65f), // Rojo
-                new GradientColorKey(new Color(0.4f, 0f, 0f), 1f)      // Rojo oscuro
+                new GradientColorKey(new Color(1f, 1f, 0.1f), 0f),
+                new GradientColorKey(new Color(1f, 0.45f, 0f), 0.25f),
+                new GradientColorKey(new Color(1f, 0.05f, 0f), 0.65f),
+                new GradientColorKey(new Color(0.4f, 0f, 0f), 1f)
             },
             new GradientAlphaKey[]
             {
@@ -485,7 +447,7 @@ public class DespegueCohete : MonoBehaviour
                 Material material = new Material(shader);
                 material.SetFloat("_Surface", 1f);
                 material.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
-                material.SetInt("_DstBlend", (int)BlendMode.One); // aditivo: brillo de fuego
+                material.SetInt("_DstBlend", (int)BlendMode.One);
                 material.SetInt("_ZWrite", 0);
                 material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
                 material.renderQueue = (int)RenderQueue.Transparent;
@@ -496,11 +458,16 @@ public class DespegueCohete : MonoBehaviour
         fuego.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
     }
 
-    // ===================== MOVIMIENTO =====================
-
     void Update()
     {
         tiempo += Time.deltaTime;
+
+        // Temporizador para viajar automáticamente a la siguiente sala tras los segundos configurados en el Inspector
+        if (!cambioSalaEjecutado && tiempo >= tiempoParaMostrarResultados)
+        {
+            cambioSalaEjecutado = true;
+            ViajarASiguienteSala();
+        }
 
         switch (fase)
         {
@@ -509,7 +476,6 @@ public class DespegueCohete : MonoBehaviour
                 {
                     fase = Fase.Despegue;
                     if (fuego != null) fuego.Play();
-                    Debug.Log("MOTORES ENCENDIDOS");
                 }
                 break;
 
@@ -521,6 +487,18 @@ public class DespegueCohete : MonoBehaviour
         LeerTeclaCambioVista();
     }
 
+    void ViajarASiguienteSala()
+    {
+        if (string.IsNullOrEmpty(nombreSiguienteSala))
+        {
+            Debug.LogError("[Transición VR] ¡El nombre de la siguiente sala está vacío en el Inspector!");
+            return;
+        }
+
+        Debug.Log("[Transición VR] Han pasado " + tiempoParaMostrarResultados + " segundos. Cargando sala: " + nombreSiguienteSala);
+        SceneManager.LoadScene(nombreSiguienteSala);
+    }
+
     void ActualizarDespegue()
     {
         velocidadActual = Mathf.Min(velocidadActual + aceleracion * Time.deltaTime, velocidadMaxima);
@@ -529,8 +507,6 @@ public class DespegueCohete : MonoBehaviour
         Vector3 centro = CentroTierra();
         float distancia = Vector3.Distance(transform.position, centro);
 
-        // Entra en orbita al tocar el anillo de la orbita (antes de chocar con la Tierra)
-        // o al llegar a la altura de la Tierra
         if (distancia <= radioActual || transform.position.y >= centro.y)
             IniciarTransicion();
     }
@@ -545,12 +521,9 @@ public class DespegueCohete : MonoBehaviour
         distInicioTransicion = Mathf.Max(desde.magnitude, 0.01f);
         dirInicioTransicion = desde / distInicioTransicion;
 
-        // Punto de entrada en el ecuador, del lado donde esta el cohete
         Vector3 horizontal = Vector3.ProjectOnPlane(desde, Vector3.up);
-        if (horizontal.sqrMagnitude < 0.01f)
-            horizontal = Vector3.ProjectOnPlane(-transform.forward, Vector3.up);
-        if (horizontal.sqrMagnitude < 0.01f)
-            horizontal = Vector3.back;
+        if (horizontal.sqrMagnitude < 0.01f) horizontal = Vector3.ProjectOnPlane(-transform.forward, Vector3.up);
+        if (horizontal.sqrMagnitude < 0.01f) horizontal = Vector3.back;
 
         direccionInicial = horizontal.normalized;
         rotInicioTransicion = transform.rotation;
@@ -558,7 +531,6 @@ public class DespegueCohete : MonoBehaviour
         anguloOrbita = 0f;
 
         fase = Fase.Transicion;
-        Debug.Log("ENTRANDO EN ORBITA");
     }
 
     void ActualizarTransicion()
@@ -566,7 +538,6 @@ public class DespegueCohete : MonoBehaviour
         progresoTransicion += Time.deltaTime / Mathf.Max(0.01f, duracionTransicion);
         float s = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(progresoTransicion));
 
-        // Se mueve en arco alrededor del planeta, nunca en linea recta a traves de el
         Vector3 dir = Vector3.Slerp(dirInicioTransicion, direccionInicial, s).normalized;
         float dist = Mathf.Lerp(distInicioTransicion, radioActual, s);
         dist = Mathf.Max(dist, radioTierra + alturaCohete * 0.5f);
@@ -579,7 +550,6 @@ public class DespegueCohete : MonoBehaviour
             fase = Fase.Orbita;
             if (!fuegoDuranteOrbita && fuego != null)
                 fuego.Stop(true, ParticleSystemStopBehavior.StopEmitting);
-            Debug.Log("ORBITANDO LA TIERRA");
         }
     }
 
@@ -592,7 +562,6 @@ public class DespegueCohete : MonoBehaviour
         transform.rotation = RotacionEnOrbita(dir);
     }
 
-    // La punta del cohete (eje Y local) apunta hacia donde avanza
     Quaternion RotacionEnOrbita(Vector3 radial)
     {
         Vector3 tangente = Vector3.Cross(Vector3.up, radial) * Signo();
@@ -601,22 +570,15 @@ public class DespegueCohete : MonoBehaviour
 
     float Signo() { return sentidoHorario ? 1f : -1f; }
 
-    // ===================== CAMARA =====================
-
     void PrepararCamara()
     {
         if (camara == null) camara = Camera.main;
-        if (camara == null)
-        {
-            Debug.LogWarning("No hay camara con la etiqueta MainCamera.");
-            return;
-        }
+        if (camara == null) return;
 
         CorregirCamaraDeformante();
 
         if (!controlarCamara) return;
 
-        // Desactivar Cinemachine u otros controladores que bloquean la camara
         Behaviour brain = camara.GetComponent("CinemachineBrain") as Behaviour;
         if (brain != null) brain.enabled = false;
 
@@ -626,9 +588,7 @@ public class DespegueCohete : MonoBehaviour
         camara.nearClipPlane = Mathf.Min(camara.nearClipPlane, 0.05f);
         camara.farClipPlane = Mathf.Max(camara.farClipPlane, (radioActual + radioTierra) * 6f + 2000f);
 
-        distanciaObj = distanciaCamara > 0f
-            ? distanciaCamara
-            : Mathf.Max(alturaCohete * 2.2f, anchoCohete * 4f);
+        distanciaObj = distanciaCamara > 0f ? distanciaCamara : Mathf.Max(alturaCohete * 2.2f, anchoCohete * 4f);
         distancia = distanciaObj;
 
         yaw = yawObj = transform.eulerAngles.y + 180f;
@@ -659,7 +619,6 @@ public class DespegueCohete : MonoBehaviour
             primeraPersona = !primeraPersona;
             miraYaw = miraYawObj = 0f;
             miraPitch = miraPitchObj = 0f;
-            Debug.Log(primeraPersona ? "VISTA: desde el cohete" : "VISTA: exterior");
         }
 
         if (soltarCursor)
@@ -671,7 +630,6 @@ public class DespegueCohete : MonoBehaviour
 
     void LateUpdate()
     {
-        // Primero las piezas, despues la camara
         if (omitirSeparacion) BloquearPiezas();
 
         if (!controlarCamara || camara == null) return;
@@ -727,7 +685,6 @@ public class DespegueCohete : MonoBehaviour
         miraYaw = Mathf.Lerp(miraYaw, miraYawObj, k);
         miraPitch = Mathf.Lerp(miraPitch, miraPitchObj, k);
 
-        // Ventana: a la altura elegida, en el borde del casco
         float y = Mathf.Lerp(baseLocalY, puntaLocalY, alturaVentana);
         Vector3 ventanaLocal = new Vector3(centroLocal.x, y, centroLocal.z);
 
@@ -735,7 +692,6 @@ public class DespegueCohete : MonoBehaviour
         float separacion = anchoCohete * 0.5f * separacionDelCasco;
         Vector3 posicion = transform.TransformPoint(ventanaLocal) + frente * separacion;
 
-        // Mirada base: hacia afuera del cohete con la punta hacia arriba
         Quaternion baseRot = Quaternion.LookRotation(frente, transform.up);
         Quaternion mirada = baseRot * Quaternion.Euler(miraPitch, miraYaw, 0f);
 
@@ -743,9 +699,6 @@ public class DespegueCohete : MonoBehaviour
         camara.transform.rotation = mirada;
     }
 
-    // Raton: mantener clic izquierdo o derecho y mover
-    // Teclado: flechas o WASD (A/D = costados, W/S = arriba/abajo)
-    // Rueda: zoom (vista exterior) | C: cambiar vista | Esc: soltar cursor
     void LeerEntrada(out Vector2 raton, out Vector2 teclas, out float rueda)
     {
         raton = Vector2.zero;
@@ -781,15 +734,12 @@ public class DespegueCohete : MonoBehaviour
 #endif
     }
 
-    // ===================== CALIDAD VISUAL =====================
-
     void QuitarMotionBlur()
     {
         foreach (Volume v in FindObjectsByType<Volume>(FindObjectsSortMode.None))
         {
             if (v.sharedProfile == null) continue;
 
-            // v.profile crea una copia en ejecucion: no modifica el archivo original
             foreach (VolumeComponent c in v.profile.components)
             {
                 if (c.GetType().Name == "MotionBlur")
@@ -798,7 +748,6 @@ public class DespegueCohete : MonoBehaviour
         }
     }
 
-    // Vista previa de la orbita en el editor
     void OnDrawGizmosSelected()
     {
         Vector3 centro = tierra != null ? tierra.position : posicionTierraManual;
@@ -807,9 +756,7 @@ public class DespegueCohete : MonoBehaviour
         if (!Application.isPlaying && radioOrbita <= 0f && tierra != null)
         {
             Bounds b;
-            float rt = CalcularLimites(tierra, out b)
-                ? Mathf.Max(b.extents.x, b.extents.y, b.extents.z)
-                : 0f;
+            float rt = CalcularLimites(tierra, out b) ? Mathf.Max(b.extents.x, b.extents.y, b.extents.z) : 0f;
             r = rt * factorRadio + margenSobreTierra;
         }
 
