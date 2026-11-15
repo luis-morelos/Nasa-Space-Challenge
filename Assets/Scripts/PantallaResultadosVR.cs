@@ -25,7 +25,6 @@ public class PantallaResultadosVR : MonoBehaviour
 
     void Update()
     {
-        // Detectar si se presiona la Barra Espaciadora (o botón equivalente en VR)
         bool presionoMenu = false;
 
 #if ENABLE_INPUT_SYSTEM
@@ -83,10 +82,12 @@ public class PantallaResultadosVR : MonoBehaviour
             pesoMin = ControladorEnsamblaje.Instance.pesoMinimoRequerido;
             pesoMax = ControladorEnsamblaje.Instance.pesoMaximoIdeal;
             infoUtil = ControladorEnsamblaje.Instance.porcentajeInformacionUtil;
+
+            Debug.Log($"[Resultados] Datos capturados con éxito. Peso: {pesoActual}, Info: {infoUtil}%, Presupuesto Restante: {presupuestoRestante}");
         }
         else
         {
-            Debug.LogWarning("[Resultados] No se encontró 'ControladorEnsamblaje.Instance'. Usando datos de prueba por defecto.");
+            Debug.LogWarning("[Resultados] ⚠️ No se encontró 'ControladorEnsamblaje.Instance'. Usando datos de prueba por defecto.");
         }
 
         // 2. Encontrar la cámara principal de la sala 3D
@@ -139,24 +140,21 @@ public class PantallaResultadosVR : MonoBehaviour
             ? $"<color=green>• Gestión Presupuestaria: ¡Excelente! Te sobraron ${presupuestoRestante:N0}.</color>"
             : $"<color=red>• Gestión Presupuestaria: ¡Déficit! Terminaste con un saldo en contra de ${Mathf.Abs(presupuestoRestante):N0}.</color>";
 
+        // --- AJUSTE DE PESO: Solo el exceso se considera negativo ---
         string feedbackPeso = "";
-        if (pesoActual >= pesoMin && pesoActual <= pesoMax)
+        if (pesoActual > pesoMax)
         {
-            feedbackPeso = $"<color=green>• Peso Estructural: ¡ÓPTIMO! ({pesoActual} kg). Estabilidad perfecta en órbita.</color>";
-        }
-        else if (pesoActual > pesoMax)
-        {
-            feedbackPeso = $"<color=red>• Peso Estructural: EXCESO ({pesoActual} kg). Sobrecargaste la nave, reduciendo su eficiencia.</color>";
+            feedbackPeso = $"<color=red>• Peso Estructural: EXCESO ({pesoActual} kg). Sobrecargaste la nave superando el límite ideal.</color>";
         }
         else
         {
-            feedbackPeso = $"<color=yellow>• Peso Estructural: LIGERO ({pesoActual} kg). Nave liviana por debajo del rango ideal.</color>";
+            feedbackPeso = $"<color=green>• Peso Estructural: ¡ÓPTIMO Y SEGURO! ({pesoActual} kg). Nave ligera y eficiente dentro del rango permitido.</color>";
         }
 
         string calificacionMision = "";
-        if (infoUtil >= 80 && presupuestoRestante >= 0 && pesoActual >= pesoMin && pesoActual <= pesoMax)
+        if (infoUtil >= 80 && presupuestoRestante >= 0 && pesoActual <= pesoMax)
             calificacionMision = "<color=#00FFFF><b>CALIFICACIÓN: ÉXITO ROTUNDO (Misión Legendaria)</b></color>";
-        else if (infoUtil >= 50 && presupuestoRestante >= -50000)
+        else if (infoUtil >= 50 && presupuestoRestante >= -50000 && pesoActual <= pesoMax)
             calificacionMision = "<color=green><b>CALIFICACIÓN: MISIÓN EXITOSA</b></color>";
         else
             calificacionMision = "<color=orange><b>CALIFICACIÓN: MISIÓN PARCIALMENTE DEFICIENTE</b></color>";
@@ -165,7 +163,7 @@ public class PantallaResultadosVR : MonoBehaviour
         tmpText.text = $"<size=120%><b>INFORME OFICIAL DE MISIÓN ESPACIAL</b></size>\n\n" +
                        $"• <b>Información Útil Recolectada:</b> {infoUtil}%\n" +
                        $"• <b>Presupuesto Final:</b> ${presupuestoRestante:N0} / ${presupuestoTotal:N0}\n" +
-                       $"• <b>Peso Total:</b> {pesoActual} kg (Rango Ideal: {pesoMin} - {pesoMax} kg)\n\n" +
+                       $"• <b>Peso Total:</b> {pesoActual} kg (Rango Ideal Máx: {pesoMax} kg)\n\n" +
                        $"<size=110%><b>EVALUACIÓN Y FEEDBACK DE TUS DECISIONES:</b></size>\n" +
                        $"{feedbackPresupuesto}\n" +
                        $"{feedbackPeso}\n" +
@@ -174,6 +172,6 @@ public class PantallaResultadosVR : MonoBehaviour
                        $"{calificacionMision}\n\n" +
                        $"<size=90%><color=#AAAAAA>👉 Presiona <b>Espacio</b> (o el botón asignado) para volver al menú.</color></size>";
 
-        Debug.Log("[Resultados Sala 3D] Panel generado con éxito. Esperando tecla Espacio.");
+        Debug.Log("[Resultados Sala 3D] Panel generado con éxito.");
     }
 }

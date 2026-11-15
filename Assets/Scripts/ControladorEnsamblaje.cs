@@ -56,6 +56,7 @@ public class ControladorEnsamblaje : MonoBehaviour
         }
 
         Instance = this;
+        DontDestroyOnLoad(gameObject); // <--- ¡Asegúrate de tener esto para que persista en la sala de resultados!
     }
 
     void Start()

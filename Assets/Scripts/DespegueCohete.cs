@@ -2,7 +2,6 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Playables;
-using UnityEngine.SceneManagement; // Necesario para cambiar de sala/escena
 using System.Collections.Generic;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
@@ -34,15 +33,6 @@ public class DespegueCohete : MonoBehaviour
     [Tooltip("Segundos para curvarse del despegue a la orbita")]
     public float duracionTransicion = 4f;
     public bool fuegoDuranteOrbita = true;
-
-    [Header("CAMBIO DE SALA (POST-MISIÓN EN VR)")]
-    [Tooltip("Segundos totales desde que inicia el lanzamiento para cambiar de sala")]
-    public float tiempoParaMostrarResultados = 10f;
-
-    [Tooltip("Escribe aquí exactamente el nombre de la siguiente escena que quieres cargar")]
-    public string nombreSiguienteSala = "NombreDeTuEscena";
-
-    private bool cambioSalaEjecutado = false;
 
     [Header("EFECTOS DE FUEGO")]
     public Transform salidaMotores;
@@ -462,13 +452,6 @@ public class DespegueCohete : MonoBehaviour
     {
         tiempo += Time.deltaTime;
 
-        // Temporizador para viajar automáticamente a la siguiente sala tras los segundos configurados en el Inspector
-        if (!cambioSalaEjecutado && tiempo >= tiempoParaMostrarResultados)
-        {
-            cambioSalaEjecutado = true;
-            ViajarASiguienteSala();
-        }
-
         switch (fase)
         {
             case Fase.Espera:
@@ -485,18 +468,6 @@ public class DespegueCohete : MonoBehaviour
         }
 
         LeerTeclaCambioVista();
-    }
-
-    void ViajarASiguienteSala()
-    {
-        if (string.IsNullOrEmpty(nombreSiguienteSala))
-        {
-            Debug.LogError("[Transición VR] ¡El nombre de la siguiente sala está vacío en el Inspector!");
-            return;
-        }
-
-        Debug.Log("[Transición VR] Han pasado " + tiempoParaMostrarResultados + " segundos. Cargando sala: " + nombreSiguienteSala);
-        SceneManager.LoadScene(nombreSiguienteSala);
     }
 
     void ActualizarDespegue()
